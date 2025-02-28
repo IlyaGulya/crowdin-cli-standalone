@@ -106,55 +106,32 @@ jobs:
         include:
           - runner: ubuntu-latest
             artifact: crowdin-cli-linux-x86_64
+            is_windows: false
           - runner: ubuntu-24.04-arm
             artifact: crowdin-cli-linux-arm64
+            is_windows: false
           - runner: macos-latest
             artifact: crowdin-cli-macos-arm64
+            is_windows: false
           - runner: macos-13
             artifact: crowdin-cli-macos-x86_64
+            is_windows: false
           - runner: windows-latest
             artifact: crowdin-cli-windows-x86_64.exe
+            is_windows: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download and Extract Crowdin CLI (Windows)
-        if: endsWith(matrix.artifact, '.exe')
-        run: |
-          $VERSION = "${{ needs.check-for-updates.outputs.version }}"
-          # Ensure VERSION has no 'v' prefix for consistency
-          $VERSION = $VERSION -replace "^v", ""
-          
-          # Download the zip file
-          Write-Host "Downloading Crowdin CLI zip for version ${VERSION}..."
-          Invoke-WebRequest -Uri "https://github.com/crowdin/crowdin-cli/releases/download/${VERSION}/crowdin-cli.zip" -OutFile crowdin-cli.zip
-          Expand-Archive -Path crowdin-cli.zip -DestinationPath . -Force
-          
-          # Verify the JAR file was extracted successfully
-          if (-not (Test-Path -Path "crowdin-cli.jar")) {
-            Write-Error "ZIP does not contain crowdin-cli.jar"
-            exit 1
-          }
-          
-          Write-Host "Successfully extracted crowdin-cli.jar"
-
-      - name: Download and Extract Crowdin CLI (Unix)
-        if: ${{ !endsWith(matrix.artifact, '.exe') }}
+      - name: Download and Extract Crowdin CLI
+        # language=bash
         run: |
           VERSION="${{ needs.check-for-updates.outputs.version }}"
-          # Ensure VERSION has no 'v' prefix for consistency
           VERSION="${VERSION#v}"
           
-          # Download the zip file
           echo "Downloading Crowdin CLI zip for version ${VERSION}..."
           curl -L -o crowdin-cli.zip "https://github.com/crowdin/crowdin-cli/releases/download/${VERSION}/crowdin-cli.zip"
           unzip -j crowdin-cli.zip
-          
-          # Verify the JAR file was extracted successfully
-          if [ ! -f crowdin-cli.jar ]; then
-            echo "ZIP does not contain crowdin-cli.jar"
-            exit 1
-          fi
           
           echo "Successfully extracted crowdin-cli.jar"
 
@@ -167,105 +144,47 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run AWT Stripper (Windows)
-        if: endsWith(matrix.artifact, '.exe')
+      - name: Run AWT Stripper
+        # language=bash
         run: |
-          # Run the stripper to remove AWT calls
-          Write-Host "Running AWT stripper to remove AWT calls from the JAR..."
-          cd stripper
-          ./gradlew.bat run --args "../crowdin-cli.jar ../crowdin-cli-stripped.jar"
-          cd ..
-          
-          # Verify the stripped JAR was created successfully
-          if (-not (Test-Path -Path "crowdin-cli-stripped.jar")) {
-            Write-Error "Failed to create stripped JAR file"
-            exit 1
-          }
-          
-          Write-Host "Successfully created stripped JAR file"
-
-      - name: Run AWT Stripper (Unix)
-        if: ${{ !endsWith(matrix.artifact, '.exe') }}
-        run: |
-          # Run the stripper to remove AWT calls
           echo "Running AWT stripper to remove AWT calls from the JAR..."
           cd stripper
-          ./gradlew run --args "../crowdin-cli.jar ../crowdin-cli-stripped.jar"
-          cd ..
-          
-          # Verify the stripped JAR was created successfully
-          if [ ! -f crowdin-cli-stripped.jar ]; then
-            echo "Failed to create stripped JAR file"
-            exit 1
-          fi
-          
+          ./${{ endsWith(matrix.artifact, '.exe') && 'gradlew.bat' || 'gradlew' }} run --args "../crowdin-cli.jar ../crowdin-cli-stripped.jar"
+
           echo "Successfully created stripped JAR file"
 
-      - name: Compile and package reflection feature (Windows)
-        if: endsWith(matrix.artifact, '.exe')
+      - name: Compile feature
+        # language=bash
         run: |
-          # Create output directory
-          New-Item -ItemType Directory -Force -Path out
-          
+          mkdir out
           # Compile the reflection feature
           javac -cp crowdin-cli-stripped.jar -d out CrowdinReflectionFeature.java
-          
-          # Package the feature into a JAR
-          jar cf feature.jar -C out .
-          
-          Write-Host "Successfully compiled and packaged reflection feature"
-
-      - name: Compile and package reflection feature (Unix)
-        if: ${{ !endsWith(matrix.artifact, '.exe') }}
-        run: |
-          # Create output directory
-          mkdir -p out
-          
-          # Compile the reflection feature
-          javac -cp crowdin-cli-stripped.jar -d out CrowdinReflectionFeature.java
-          
-          # Package the feature into a JAR
-          jar cf feature.jar -C out .
           
           echo "Successfully compiled and packaged reflection feature"
 
       - name: Build native image
-        run: |
-          native-image \
-          -Os \
-          -cp feature.jar \
-          -cp crowdin-cli-stripped.jar \
-          -H:Features=CrowdinReflectionFeature \
-          -H:IncludeResources="META-INF/services/.*|crowdin.*|messages/.*" \
-          --no-fallback \
-          --enable-url-protocols=http,https \
-          com.crowdin.cli.Cli \
+        # language=bash
+        run: >
+          native-image
+          -Os
+          -cp out
+          -cp crowdin-cli-stripped.jar
+          -H:Features=CrowdinReflectionFeature
+          -H:IncludeResources="META-INF/services/.*|crowdin.*|messages/.*"
+          --no-fallback
+          --enable-url-protocols=http,https
+          com.crowdin.cli.Cli
           ${{ matrix.artifact }}
 
-      - name: Test Crowdin CLI (Windows)
-        if: endsWith(matrix.artifact, '.exe')
-        run: |
-          cd testproject
-          
-          Write-Host "Testing download sources..."
-          ../${{ matrix.artifact }} download sources
-          
-          Write-Host "Testing download translations..."
-          ../${{ matrix.artifact }} download translations
-          
-          Write-Host "Testing upload sources..."
-          ../${{ matrix.artifact }} upload sources
-          
-          Write-Host "Testing upload translations..."
-          ../${{ matrix.artifact }} upload translations
-        env:
-          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-          CROWDIN_PROJECT_ID: ${{ vars.CROWDIN_PROJECT_ID }}
-
-      - name: Test Crowdin CLI (Unix)
-        if: ${{ !endsWith(matrix.artifact, '.exe') }}
+      - name: Prepare for testing
+        if: ${{ !matrix.is_windows }}
+        # language=bash
         run: |
           chmod +x ./${{ matrix.artifact }}
+
+      - name: Test Crowdin CLI
+        # language=bash
+        run: |
           cd testproject
           
           echo "Testing download sources..."
@@ -303,7 +222,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: binaries
-          merge-multiple: false
+          merge-multiple: true
 
       - name: Create version branch and tag
         # language=bash
@@ -347,9 +266,5 @@ jobs:
           prerelease: false
           make_latest: ${{ needs.check-for-updates.outputs.mark_as_latest }}
           files: |
-            binaries/crowdin-cli-linux-x86_64/crowdin-cli-linux-x86_64
-            binaries/crowdin-cli-linux-arm64/crowdin-cli-linux-arm64
-            binaries/crowdin-cli-macos-arm64/crowdin-cli-macos-arm64
-            binaries/crowdin-cli-macos-x86_64/crowdin-cli-macos-x86_64
-            binaries/crowdin-cli-windows-x86_64.exe/crowdin-cli-windows-x86_64.exe
+            binaries/*
           fail_on_unmatched_files: true
