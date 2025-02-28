@@ -31,7 +31,7 @@ env:
   REPO_NAME: crowdin-cli-standalone
 
 jobs:
-  check-for-updates:
+  determine-version:
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.check-version.outputs.new_version }}
