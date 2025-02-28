@@ -182,7 +182,7 @@ jobs:
               '--no-fallback',
               '--enable-url-protocols=http,https',
               'com.crowdin.cli.Cli',
-              '${{ matrix.artifact }}'
+              '${{ matrix.artifact }}'.replace('.exe', '')
             ].join(' ');
             
             console.log(`Executing command: ${command}`);
