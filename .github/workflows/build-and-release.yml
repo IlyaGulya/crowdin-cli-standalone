@@ -128,8 +128,8 @@ jobs:
           VERSION: ${{ needs.determine-version.outputs.version }}
         # language=bash
         run: |          
-          echo "Downloading Crowdin CLI zip for version ${VERSION}..."
-          curl -L -o crowdin-cli.zip "https://github.com/crowdin/crowdin-cli/releases/download/${VERSION}/crowdin-cli.zip"
+          echo "Downloading Crowdin CLI zip for version ${{ env.VERSION }}..."
+          curl -L -o crowdin-cli.zip "https://github.com/crowdin/crowdin-cli/releases/download/${{ env.VERSION }}/crowdin-cli.zip"
           unzip -j crowdin-cli.zip
           
           echo "Successfully extracted crowdin-cli.jar"
