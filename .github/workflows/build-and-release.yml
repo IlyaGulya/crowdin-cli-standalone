@@ -142,6 +142,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Run AWT Stripper
         # language=bash
@@ -161,18 +163,37 @@ jobs:
           echo "Successfully compiled and packaged reflection feature"
 
       - name: Build native image
-        # language=bash
-        run: >
-          native-image
-          -Os
-          -cp out
-          -cp crowdin-cli-stripped.jar
-          -H:Features=CrowdinReflectionFeature
-          -H:IncludeResources="META-INF/services/.*|crowdin.*|messages/.*"
-          --no-fallback
-          --enable-url-protocols=http,https
-          com.crowdin.cli.Cli
-          ${{ matrix.artifact }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            
+            // Construct the command with proper escaping
+            const includeResources = 'META-INF/services/.*|crowdin.*|messages/.*';
+            
+            // Build the command as an array to avoid shell escaping issues
+            const command = [
+              'native-image',
+              '-Os',
+              '-cp', 'out',
+              '-cp', 'crowdin-cli-stripped.jar',
+              '-H:Features=CrowdinReflectionFeature',
+              `-H:IncludeResources="${includeResources}"`,
+              '--no-fallback',
+              '--enable-url-protocols=http,https',
+              'com.crowdin.cli.Cli',
+              '${{ matrix.artifact }}'
+            ].join(' ');
+            
+            console.log(`Executing command: ${command}`);
+            
+            try {
+              execSync(command, { stdio: 'inherit' });
+              console.log('Native image build completed successfully');
+            } catch (error) {
+              console.error(`Error building native image: ${error.message}`);
+              process.exit(1);
+            }
 
       - name: Prepare for testing
         if: ${{ !matrix.is_windows }}
