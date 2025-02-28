@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+
+# macOS
+.DS_Store
+
+# Crowdin CLI binaries
+crowdin-cli-*
+crowdin-cli.jar
+crowdin-cli-stripped.jar
+feature.jar 
