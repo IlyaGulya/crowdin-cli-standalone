@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Crowdin CLI version to build (e.g. 3.16.0)'
+        description: 'Crowdin CLI version to build (e.g. 4.4.0)'
         required: false
         type: string
       force:
@@ -98,8 +98,8 @@ jobs:
             core.setOutput('version', version);
 
   build-native:
-    needs: check-for-updates
-    if: ${{ needs.check-for-updates.outputs.new_version == 'true' }}
+    needs: determine-version
+    if: ${{ needs.determine-version.outputs.new_version == 'true' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -124,11 +124,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download and Extract Crowdin CLI
+        env:
+          VERSION: ${{ needs.determine-version.outputs.version }}
         # language=bash
-        run: |
-          VERSION="${{ needs.check-for-updates.outputs.version }}"
-          VERSION="${VERSION#v}"
-          
+        run: |          
           echo "Downloading Crowdin CLI zip for version ${VERSION}..."
           curl -L -o crowdin-cli.zip "https://github.com/crowdin/crowdin-cli/releases/download/${VERSION}/crowdin-cli.zip"
           unzip -j crowdin-cli.zip
@@ -209,8 +208,8 @@ jobs:
           path: ${{ matrix.artifact }}
 
   create-release:
-    needs: [check-for-updates, build-native]
-    if: ${{ needs.check-for-updates.outputs.new_version == 'true' }}
+    needs: [determine-version, build-native]
+    if: ${{ needs.determine-version.outputs.new_version == 'true' }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -227,8 +226,8 @@ jobs:
       - name: Create version branch and tag
         # language=bash
         run: |
-          VERSION="${{ needs.check-for-updates.outputs.version }}"
-          MARK_AS_LATEST="${{ needs.check-for-updates.outputs.mark_as_latest }}"
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          MARK_AS_LATEST="${{ needs.determine-version.outputs.mark_as_latest }}"
           
           # Configure Git
           git config --global user.name "GitHub Actions"
@@ -255,16 +254,16 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check-for-updates.outputs.version }}
-          name: Crowdin CLI v${{ needs.check-for-updates.outputs.version }}
+          tag_name: ${{ needs.determine-version.outputs.version }}
+          name: Crowdin CLI v${{ needs.determine-version.outputs.version }}
           body: |
-            Crowdin CLI v${{ needs.check-for-updates.outputs.version }} native binaries
+            Crowdin CLI v${{ needs.determine-version.outputs.version }} native binaries
             
             These are native binaries built from the official Crowdin CLI JAR using GraalVM.
             AWT dependencies have been removed to reduce binary size and improve compatibility.
           draft: false
           prerelease: false
-          make_latest: ${{ needs.check-for-updates.outputs.mark_as_latest }}
+          make_latest: ${{ needs.determine-version.outputs.mark_as_latest }}
           files: |
             binaries/*
           fail_on_unmatched_files: true
