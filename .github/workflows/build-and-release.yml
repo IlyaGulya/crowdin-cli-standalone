@@ -147,8 +147,7 @@ jobs:
         # language=bash
         run: |
           echo "Running AWT stripper to remove AWT calls from the JAR..."
-          cd stripper
-          ./${{ endsWith(matrix.artifact, '.exe') && 'gradlew.bat' || 'gradlew' }} run --args "../crowdin-cli.jar ../crowdin-cli-stripped.jar"
+          ./${{ endsWith(matrix.artifact, '.exe') && 'gradlew.bat' || 'gradlew' }} run --args "crowdin-cli.jar crowdin-cli-stripped.jar"
 
           echo "Successfully created stripped JAR file"
 
